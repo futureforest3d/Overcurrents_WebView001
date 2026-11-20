@@ -1,0 +1,2052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cable mesh viewer v2</title>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0a0c10;
+      --panel: rgba(12, 16, 24, 0.84);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8ecf4;
+      --muted: #8b95a8;
+      --accent: #5ec8ff;
+      --accent-dim: #2a7fa8;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --error: #f87171;
+      --csv-bar-height: 148px;
+    }
+
+    html,
+    body,
+    #app {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+    }
+
+    #canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: calc(100% - var(--csv-bar-height));
+    }
+
+    .label-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: calc(100% - var(--csv-bar-height));
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .tube-label {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: rgba(8, 12, 20, 0.86);
+      border: 1px solid rgba(94, 200, 255, 0.35);
+      color: #e8ecf4;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-align: center;
+      white-space: pre;
+      transform: translate(-50%, -50%);
+      user-select: none;
+    }
+
+    .tube-label--selected {
+      border-color: rgba(255, 244, 194, 0.8);
+      color: #fff4c2;
+    }
+
+    .panel {
+      position: absolute;
+      backdrop-filter: blur(12px);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      z-index: 2;
+      pointer-events: auto;
+    }
+
+    .panel-header {
+      top: 16px;
+      left: 16px;
+      width: min(320px, calc(100vw - 32px));
+    }
+
+    .panel-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .subtitle,
+    .hint,
+    .muted {
+      color: var(--muted);
+    }
+
+    .subtitle {
+      margin-top: 2px;
+      font-size: 12px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 3px 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stats dt {
+      color: var(--muted);
+    }
+
+    #stats-notes {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    .ok {
+      color: var(--ok);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    .error {
+      color: var(--error);
+    }
+
+    .panel-controls {
+      top: 16px;
+      right: 16px;
+      width: min(320px, calc(100vw - 32px));
+      max-height: calc(100vh - var(--csv-bar-height) - 32px);
+      overflow: auto;
+    }
+
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .section:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .section h2 {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      border-color: rgba(94, 200, 255, 0.45);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .btn-primary {
+      background: rgba(94, 200, 255, 0.16);
+      border-color: rgba(94, 200, 255, 0.4);
+    }
+
+    .btn-active {
+      background: rgba(255, 244, 194, 0.16);
+      border-color: rgba(255, 244, 194, 0.55);
+    }
+
+    label.file-btn {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .toggle,
+    .field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input[type="number"],
+    select {
+      width: 108px;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font: inherit;
+    }
+
+    input[type="range"] {
+      width: 120px;
+      accent-color: var(--accent);
+    }
+
+    .legend {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
+      vertical-align: -1px;
+    }
+
+    .panel-selection {
+      left: 16px;
+      bottom: calc(var(--csv-bar-height) + 16px);
+      width: min(360px, calc(100vw - 32px));
+    }
+
+    .panel-selection h2 {
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .selection-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 2px 12px;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hint {
+      margin-top: 8px;
+      font-size: 11px;
+    }
+
+    .panel-footer {
+      position: absolute;
+      left: 348px;
+      bottom: calc(var(--csv-bar-height) + 16px);
+      display: flex;
+      gap: 16px;
+      z-index: 2;
+      color: var(--muted);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .help {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .help summary {
+      cursor: pointer;
+      color: var(--text);
+    }
+
+    .help ul {
+      margin-top: 6px;
+      padding-left: 18px;
+    }
+
+    .help li {
+      margin-bottom: 4px;
+    }
+
+    .bounds-label {
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(8, 12, 20, 0.88);
+      border: 1px solid rgba(255, 204, 0, 0.55);
+      color: #ffe08a;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      transform: translate(-50%, -50%);
+      user-select: none;
+    }
+
+    .panel-csv-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: var(--csv-bar-height);
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 6px 12px 8px;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+
+    .csv-viewer-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .csv-viewer-position {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .csv-viewer-table-wrap {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.22);
+    }
+
+    .csv-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .csv-table th,
+    .csv-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 3px 7px;
+      text-align: left;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .csv-table th {
+      position: sticky;
+      top: 0;
+      background: rgba(12, 16, 24, 0.96);
+      color: var(--muted);
+      z-index: 1;
+    }
+
+    .csv-row--active td {
+      background: rgba(255, 122, 0, 0.1);
+    }
+
+    .csv-id-btn {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--accent);
+      cursor: pointer;
+      font: inherit;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+    }
+
+    .csv-id-btn--active {
+      border-color: #ff7a00;
+      color: #ffd2a8;
+    }
+
+    .csv-viewer-empty {
+      padding: 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .selection-note {
+      margin-top: 6px;
+      color: #ff9f43;
+      font-size: 12px;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.177.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.177.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="canvas"></canvas>
+
+    <section class="panel panel-header">
+      <h1>Cable mesh</h1>
+      <p class="subtitle" id="filename">Loading…</p>
+      <dl class="stats" id="stats"></dl>
+      <div id="stats-notes"></div>
+    </section>
+
+    <section class="panel panel-controls">
+      <div class="section">
+        <h2>File</h2>
+        <div class="row">
+          <label class="btn btn-primary file-btn" for="csv-input">Load CSV</label>
+          <input id="csv-input" type="file" accept=".csv,text/csv" hidden />
+          <button id="reload-default" class="btn" type="button">Reload embedded</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>View</h2>
+        <div class="row">
+          <button id="reset-camera" class="btn" type="button">Fit mesh</button>
+        </div>
+        <label class="field" for="diameter">
+          Thickness
+          <input id="diameter" type="range" min="0.005" max="0.5" step="0.005" value="0.03" />
+          <span id="diameter-readout">0.030 m</span>
+        </label>
+        <label class="field" for="color-mode">
+          Color
+          <select id="color-mode">
+            <option value="uniform">Single color</option>
+            <option value="pieces">By piece count</option>
+            <option value="role">Rim / center</option>
+          </select>
+        </label>
+        <div class="legend" id="legend"></div>
+        <label class="toggle"><span>Joints</span><input id="show-joints" type="checkbox" checked /></label>
+        <label class="toggle"><span>Centerlines</span><input id="show-lines" type="checkbox" checked /></label>
+        <label class="toggle"><span>Ground</span><input id="show-ground" type="checkbox" checked /></label>
+        <label class="toggle"><span>Bounds</span><input id="show-bounds" type="checkbox" /></label>
+        <label class="toggle" id="mass0-toggle" hidden>
+          <span>Mass-0 edges</span><input id="show-mass0" type="checkbox" checked />
+        </label>
+        <label class="toggle" id="posts-toggle" hidden>
+          <span>Posts</span><input id="show-posts" type="checkbox" checked />
+        </label>
+        <label class="toggle"><span>Person scale</span><input id="show-people" type="checkbox" /></label>
+        <label class="field" for="person-height">
+          Person height
+          <input id="person-height" type="number" min="0.2" max="5" step="0.1" value="1.6" />
+        </label>
+        <label class="toggle"><span>Length mismatch</span><input id="highlight-errors" type="checkbox" checked /></label>
+        <label class="toggle"><span>Index labels</span><input id="show-indexes" type="checkbox" /></label>
+        <label class="toggle"><span>Length labels</span><input id="show-lengths" type="checkbox" /></label>
+        <details class="help">
+          <summary>Controls</summary>
+          <ul>
+            <li>Click near a cable to select it. Other cables dim.</li>
+            <li>Scroll the bottom bar, or use Previous and Next, to browse CSV rows.</li>
+            <li>Orbit: left-drag. Pan: right-drag. Zoom: scroll.</li>
+            <li>Data selected only keeps the label on the selected cable.</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="section">
+        <h2>Selection</h2>
+        <label class="field" for="goto-index">
+          Row index
+          <input id="goto-index" type="number" min="0" step="1" placeholder="0" />
+        </label>
+        <div class="row">
+          <button id="goto-cable" class="btn" type="button">Show index</button>
+          <button id="frame-selected" class="btn btn-primary" type="button" disabled>Orbit selected</button>
+          <button id="isolate-cable" class="btn" type="button" disabled>Data selected only</button>
+          <button id="clear-selection" class="btn" type="button" disabled>Clear</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-selection">
+      <h2 id="selection-title">No cable selected</h2>
+      <div class="selection-grid" id="selection-info"></div>
+      <p class="hint">Drag to orbit, scroll to zoom, click near a cable. Drop a CSV anywhere to open it.</p>
+    </section>
+
+    <footer class="panel-footer">
+      <span id="footer-file">—</span>
+      <span id="version">cable mesh viewer v2</span>
+    </footer>
+
+    <section id="csv-viewer" class="panel-csv-bar"></section>
+  </div>
+
+  <script type="text/plain" id="default-csv-data">___EMBEDDED_CSV___</script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    const UNIFORM_COLOR = 0x5ec8ff;
+    const ERROR_COLOR = 0xf87171;
+    const SELECTED_COLOR = 0xff7a00;
+    const DIM_FACTOR = 0.5;
+    const DEFAULT_DIAMETER = 0.03;
+    const PICK_PIXELS = 32;
+    const ROLE_COLORS = {
+      plain: 0x7c8aa0,
+      rim: 0x5ec8ff,
+      center: 0xfbbf24,
+      both: 0xf472b6,
+      mass0: 0xf8fafc,
+    };
+    const PIECE_COLORS = {
+      1: 0x5ec8ff,
+      2: 0x4ade80,
+      3: 0xfbbf24,
+      4: 0xfb923c,
+      5: 0xf472b6,
+      6: 0xc084fc,
+      7: 0xa78bfa,
+      8: 0x38bdf8,
+    };
+
+    const canvas = document.getElementById('canvas');
+    const statsEl = document.getElementById('stats');
+    const statsNotesEl = document.getElementById('stats-notes');
+    const filenameEl = document.getElementById('filename');
+    const legendEl = document.getElementById('legend');
+    const selectionTitle = document.getElementById('selection-title');
+    const selectionInfo = document.getElementById('selection-info');
+    const diameterInput = document.getElementById('diameter');
+    const diameterReadout = document.getElementById('diameter-readout');
+    const colorModeInput = document.getElementById('color-mode');
+    const showJointsInput = document.getElementById('show-joints');
+    const showLinesInput = document.getElementById('show-lines');
+    const showGroundInput = document.getElementById('show-ground');
+    const showBoundsInput = document.getElementById('show-bounds');
+    const showMass0Input = document.getElementById('show-mass0');
+    const mass0Toggle = document.getElementById('mass0-toggle');
+    const showPostsInput = document.getElementById('show-posts');
+    const postsToggle = document.getElementById('posts-toggle');
+    const showPeopleInput = document.getElementById('show-people');
+    const personHeightInput = document.getElementById('person-height');
+    const highlightErrorsInput = document.getElementById('highlight-errors');
+    const showIndexesInput = document.getElementById('show-indexes');
+    const showLengthsInput = document.getElementById('show-lengths');
+    const gotoInput = document.getElementById('goto-index');
+    const frameSelectedBtn = document.getElementById('frame-selected');
+    const isolateBtn = document.getElementById('isolate-cable');
+    const clearSelectionBtn = document.getElementById('clear-selection');
+    const footerFileEl = document.getElementById('footer-file');
+    const csvViewerEl = document.getElementById('csv-viewer');
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.domElement.className = 'label-layer';
+    canvas.insertAdjacentElement('afterend', labelRenderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0c10);
+    scene.fog = new THREE.Fog(0x0a0c10, 80, 280);
+
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 2000);
+    camera.position.set(28, 18, 28);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.screenSpacePanning = true;
+    controls.target.set(0, 0, 0);
+
+    scene.add(new THREE.AmbientLight(0x607090, 0.6));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
+    keyLight.position.set(24, 40, 16);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0x88bbff, 0.4);
+    fillLight.position.set(-20, 14, -22);
+    scene.add(fillLight);
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const pointerDown = { x: 0, y: 0 };
+    const cylinderAxis = new THREE.Vector3(0, 1, 0);
+    const materialCache = new Map();
+    const highlightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xfff4c2,
+      emissive: 0xfff4c2,
+      emissiveIntensity: 0.7,
+      metalness: 0.25,
+      roughness: 0.35,
+    });
+
+    let currentData = null;
+    let currentFileName = '';
+    let structureGroup = null;
+    let postGroup = null;
+    let labelsGroup = null;
+    let boundsGroup = null;
+    let peopleGroup = null;
+    let grid = null;
+    let ground = null;
+    let selectedId = null;
+    let isolateMode = false;
+    let cameraAnimation = null;
+    let diameterTimer = 0;
+
+    function parseNumber(value) {
+      const n = Number.parseFloat(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function splitCSVLine(line) {
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (char === ',' && !inQuotes) {
+          values.push(current);
+          current = '';
+          continue;
+        }
+        current += char;
+      }
+      values.push(current);
+      return values;
+    }
+
+    function parseRows(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length < 2) throw new Error('CSV has no data rows.');
+      const headers = splitCSVLine(lines[0]).map((header) => header.trim());
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const values = splitCSVLine(line);
+        const row = {};
+        for (let c = 0; c < headers.length; c++) row[headers[c]] = values[c]?.trim() ?? '';
+        rows.push(row);
+      }
+      return { headers, rows, meta: readHeaderMeta(headers) };
+    }
+
+    function readHeaderMeta(headers) {
+      const meta = { totalPieces: null, lengthTotal: null, costLabel: null };
+      for (const header of headers) {
+        const pieces = header.match(/Total Pcs:\s*([0-9.]+)/i);
+        const cost = header.match(/total cost:\s*(\$[0-9,.]+)/i);
+        const length = header.match(/LengthTotal:\s*([0-9.]+)/i);
+        if (pieces) meta.totalPieces = Number(pieces[1]);
+        if (cost) meta.costLabel = cost[1];
+        if (length) meta.lengthTotal = Number(length[1]);
+      }
+      return meta;
+    }
+
+    // Blender is Z-up. Gravity in this export is external_force_z = -9.81 * mass.
+    function blenderToThree(x, y, z) {
+      return new THREE.Vector3(x, z, -y);
+    }
+
+    function pointKey(point) {
+      return `${point.x.toFixed(4)}|${point.y.toFixed(4)}|${point.z.toFixed(4)}`;
+    }
+
+    function colinear(a, b, c) {
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const abz = b.z - a.z;
+      const bcx = c.x - b.x;
+      const bcy = c.y - b.y;
+      const bcz = c.z - b.z;
+      const cross = Math.hypot(aby * bcz - abz * bcy, abz * bcx - abx * bcz, abx * bcy - aby * bcx);
+      const scale = Math.hypot(abx, aby, abz) * Math.hypot(bcx, bcy, bcz);
+      if (scale < 1e-10) return true;
+      return cross / scale < 1e-3;
+    }
+
+    function straightRuns(points) {
+      if (points.length < 2) return [];
+      const runs = [];
+      let start = 0;
+      for (let i = 1; i < points.length - 1; i++) {
+        if (!colinear(points[start], points[i], points[i + 1])) {
+          runs.push([points[start], points[i]]);
+          start = i;
+        }
+      }
+      runs.push([points[start], points[points.length - 1]]);
+      return runs.filter(([a, b]) => a.distanceTo(b) > 1e-6);
+    }
+
+    function pathLength(points) {
+      let length = 0;
+      for (let i = 1; i < points.length; i++) length += points[i].distanceTo(points[i - 1]);
+      return length;
+    }
+
+    function midpointAlong(points) {
+      const total = pathLength(points);
+      let remain = total / 2;
+      for (let i = 1; i < points.length; i++) {
+        const span = points[i].distanceTo(points[i - 1]);
+        if (remain <= span || i === points.length - 1) {
+          const t = span === 0 ? 0 : Math.min(remain / span, 1);
+          return points[i - 1].clone().lerp(points[i], t);
+        }
+        remain -= span;
+      }
+      return points[points.length - 1].clone();
+    }
+
+    function boundsFromPoints(points) {
+      const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+      const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+      for (const point of points) {
+        min.min(point);
+        max.max(point);
+      }
+      if (!Number.isFinite(min.x)) {
+        min.set(0, 0, 0);
+        max.set(0, 0, 0);
+      }
+      const size = max.clone().sub(min);
+      const center = min.clone().add(max).multiplyScalar(0.5);
+      return { min, max, size, center };
+    }
+
+    function emptyBounds() {
+      return {
+        min: new THREE.Vector3(Infinity, Infinity, Infinity),
+        max: new THREE.Vector3(-Infinity, -Infinity, -Infinity),
+      };
+    }
+
+    function includePoint(bounds, point) {
+      bounds.min.min(point);
+      bounds.max.max(point);
+    }
+
+    function finishBounds(bounds) {
+      if (!Number.isFinite(bounds.min.x)) return boundsFromPoints([]);
+      return boundsFromPoints([bounds.min, bounds.max]);
+    }
+
+    function roleFor(mass, rimMax, centerMax) {
+      if (mass === 0) return 'mass0';
+      const rim = rimMax > 1e-4;
+      const center = centerMax > 1e-4;
+      if (rim && center) return 'both';
+      if (center) return 'center';
+      if (rim) return 'rim';
+      return 'plain';
+    }
+
+    function cableFromRows(groupRows, idFallback) {
+      const points = [];
+      let rimMin = Infinity;
+      let rimMax = -Infinity;
+      let centerMin = Infinity;
+      let centerMax = -Infinity;
+      for (const row of groupRows) {
+        const x = parseNumber(row.position_x);
+        const y = parseNumber(row.position_y);
+        const z = parseNumber(row.position_z);
+        if (x === null || y === null || z === null) continue;
+        points.push(blenderToThree(x, y, z));
+        const rim = parseNumber(row.Rim) ?? 0;
+        const center = parseNumber(row.Center) ?? 0;
+        rimMin = Math.min(rimMin, rim);
+        rimMax = Math.max(rimMax, rim);
+        centerMin = Math.min(centerMin, center);
+        centerMax = Math.max(centerMax, center);
+      }
+      if (points.length < 2) return null;
+      const source = groupRows[0];
+      const computedLength = pathLength(points);
+      const csvLength = parseNumber(source.tubelength) ?? computedLength;
+      const mass = parseNumber(source.mass);
+      return {
+        id: parseNumber(source.index) ?? idFallback,
+        indexStart: parseNumber(groupRows[0].index) ?? idFallback,
+        indexEnd: parseNumber(groupRows[groupRows.length - 1].index) ?? idFallback,
+        name: source.name || '',
+        points,
+        runs: straightRuns(points),
+        csvLength,
+        computedLength,
+        lengthMatch: Math.abs(computedLength - csvLength) <= 0.01,
+        pieces: parseNumber(source.pieces),
+        mass,
+        diameter: parseNumber(source.tubediameter),
+        cellId: parseNumber(source.cell_id),
+        role: roleFor(mass, rimMax, centerMax),
+        rimMin: Number.isFinite(rimMin) ? rimMin : 0,
+        rimMax: Number.isFinite(rimMax) ? rimMax : 0,
+        centerMin: Number.isFinite(centerMin) ? centerMin : 0,
+        centerMax: Number.isFinite(centerMax) ? centerMax : 0,
+        sampleCount: points.length,
+        format: 'cable',
+        rows: groupRows,
+        jointDiameter: parseNumber(source.jointdiameter),
+      };
+    }
+
+    // Consecutive rows that share start_pos/end_pos are one cable.
+    // position_* is the centerline. Its length matches tubelength.
+    function parseCableExport(parsed) {
+      const groups = [];
+      let current = null;
+      for (const row of parsed.rows) {
+        const coords = [
+          row.start_pos_x,
+          row.start_pos_y,
+          row.start_pos_z,
+          row.end_pos_x,
+          row.end_pos_y,
+          row.end_pos_z,
+        ].map(parseNumber);
+        if (coords.some((value) => value === null)) continue;
+        const key = coords.map((value) => value.toFixed(5)).join('|');
+        if (!current || current.key !== key) {
+          current = { key, rows: [row] };
+          groups.push(current);
+        } else {
+          current.rows.push(row);
+        }
+      }
+
+      const cables = [];
+      for (const group of groups) {
+        const cable = cableFromRows(group.rows, cables.length);
+        if (cable) cables.push(cable);
+      }
+      if (!cables.length) throw new Error('No cables found. Each cable needs two or more position samples.');
+      return finishParse('cable', cables, [], parsed);
+    }
+
+    function parseEdgemesh(parsed) {
+      const byTube = new Map();
+      for (const row of parsed.rows) {
+        const tubeId = parseNumber(row.tubeID);
+        if (tubeId === null) continue;
+        if (!byTube.has(tubeId)) byTube.set(tubeId, []);
+        byTube.get(tubeId).push(row);
+      }
+
+      const cables = [];
+      for (const [tubeId, tubeRows] of byTube) {
+        const sorted = [...tubeRows].sort(
+          (a, b) => (parseNumber(a.index) ?? 0) - (parseNumber(b.index) ?? 0)
+        );
+        const byPost = new Map();
+        const positions = [];
+        for (const row of sorted) {
+          const x = parseNumber(row.position_x);
+          const y = parseNumber(row.position_y);
+          const z = parseNumber(row.position_z);
+          if (x === null || y === null || z === null) continue;
+          const point = blenderToThree(x, y, z);
+          positions.push(point);
+          const postId = parseNumber(row.postid);
+          if (postId !== null && !byPost.has(postId)) byPost.set(postId, point);
+        }
+        if (positions.length < 2) continue;
+        const start = byPost.has(0) && byPost.has(1) ? byPost.get(0) : positions[0];
+        const end = byPost.has(0) && byPost.has(1) ? byPost.get(1) : positions[1];
+        const computedLength = start.distanceTo(end);
+        const csvLength = parseNumber(sorted[0].tubelength) ?? computedLength;
+        cables.push({
+          id: tubeId,
+          indexStart: parseNumber(sorted[0].index) ?? tubeId,
+          indexEnd: parseNumber(sorted[sorted.length - 1].index) ?? tubeId,
+          name: sorted[0].name || '',
+          points: [start, end],
+          runs: [[start, end]],
+          csvLength,
+          computedLength,
+          lengthMatch: Math.abs(computedLength - csvLength) <= 0.01,
+          pieces: null,
+          mass: null,
+          diameter: parseNumber(sorted[0].tubediameter),
+          cellId: parseNumber(sorted[0].cell_id),
+          role: 'plain',
+          rimMin: 0,
+          rimMax: 0,
+          centerMin: 0,
+          centerMax: 0,
+          sampleCount: sorted.length,
+          format: 'edgemesh',
+          rows: sorted,
+          jointDiameter: parseNumber(sorted[0].jointdiameter),
+        });
+      }
+      cables.sort((a, b) => a.id - b.id);
+      if (!cables.length) throw new Error('No edgemesh tubes found in CSV.');
+      return finishParse('edgemesh', cables, postsFromRows(parsed.rows), parsed);
+    }
+
+    function postsFromRows(rows) {
+      const entries = [];
+      for (const row of rows) {
+        const x = parseNumber(row.postpoints_x);
+        const y = parseNumber(row.postpoints_y);
+        const z = parseNumber(row.postpoints_z);
+        if (x === null || y === null || z === null) continue;
+        if (x === 0 && y === 0 && z === 0) continue;
+        entries.push({
+          point: blenderToThree(x, y, z),
+          diameter: parseNumber(row.postdiameter) ?? 0.2,
+        });
+      }
+      const posts = [];
+      for (let i = 0; i < entries.length; i += 2) {
+        const groundPoint = entries[i];
+        const top = entries[i + 1];
+        if (!groundPoint || !top) break;
+        posts.push({
+          id: posts.length,
+          start: groundPoint.point,
+          end: top.point,
+          diameter: groundPoint.diameter || top.diameter || 0.2,
+          length: groundPoint.point.distanceTo(top.point),
+        });
+      }
+      return posts;
+    }
+
+    function finishParse(format, cables, posts, parsed) {
+      const bounds = emptyBounds();
+      const vertices = new Set();
+      let computedTotal = 0;
+      let mismatchCount = 0;
+      let pieceSum = 0;
+      let mass0Count = 0;
+      let sampleCount = 0;
+      for (const cable of cables) {
+        computedTotal += cable.computedLength;
+        sampleCount += cable.sampleCount;
+        if (!cable.lengthMatch) mismatchCount += 1;
+        if (cable.pieces) pieceSum += cable.pieces;
+        if (cable.role === 'mass0') mass0Count += 1;
+        for (const point of cable.points) includePoint(bounds, point);
+        for (const [a, b] of cable.runs) {
+          vertices.add(pointKey(a));
+          vertices.add(pointKey(b));
+        }
+      }
+      for (const post of posts) {
+        includePoint(bounds, post.start);
+        includePoint(bounds, post.end);
+      }
+      const names = new Set(cables.map((cable) => cable.name).filter(Boolean));
+      return {
+        format,
+        cables,
+        posts,
+        csvHeaders: parsed.headers,
+        bounds: finishBounds(bounds),
+        meta: parsed.meta,
+        summary: {
+          format,
+          objectName: names.size === 1 ? [...names][0] : names.size ? `${names.size} objects` : '',
+          cableCount: cables.length,
+          vertexCount: vertices.size,
+          sampleCount,
+          computedTotalLength: computedTotal,
+          headerLength: parsed.meta.lengthTotal,
+          totalPieces: parsed.meta.totalPieces ?? (pieceSum || null),
+          pieceSum,
+          costLabel: parsed.meta.costLabel,
+          mass0Count,
+          lengthMismatchCount: mismatchCount,
+          postCount: posts.length,
+        },
+      };
+    }
+
+    function parseCSV(text) {
+      const parsed = parseRows(text);
+      if (parsed.headers.includes('tubeID')) return parseEdgemesh(parsed);
+      if (parsed.headers.includes('position_x') && parsed.headers.includes('start_pos_x')) {
+        return parseCableExport(parsed);
+      }
+      throw new Error('Unrecognized CSV. Expected start_pos_x with position_x, or a tubeID column.');
+    }
+
+    function displayDiameter() {
+      return Number.parseFloat(diameterInput.value) || DEFAULT_DIAMETER;
+    }
+
+    function colorForCable(cable) {
+      if (highlightErrorsInput.checked && cable.lengthMatch === false) return ERROR_COLOR;
+      const mode = colorModeInput.value;
+      if (mode === 'pieces') {
+        if (cable.pieces >= 20) return 0xf8fafc;
+        return PIECE_COLORS[cable.pieces] || 0x94a3b8;
+      }
+      if (mode === 'role') return ROLE_COLORS[cable.role] || ROLE_COLORS.plain;
+      return UNIFORM_COLOR;
+    }
+
+    function materialFor(hex) {
+      if (!materialCache.has(hex)) {
+        const color = new THREE.Color(hex);
+        materialCache.set(
+          hex,
+          new THREE.MeshStandardMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: 0.22,
+            metalness: 0.42,
+            roughness: 0.4,
+          })
+        );
+      }
+      return materialCache.get(hex);
+    }
+
+    function visibleCables() {
+      if (!currentData) return [];
+      if (showMass0Input.checked) return currentData.cables;
+      return currentData.cables.filter((cable) => cable.role !== 'mass0');
+    }
+
+    function isSharedMaterial(material) {
+      if (!material || material === highlightMaterial) return true;
+      for (const cached of materialCache.values()) {
+        if (cached === material) return true;
+      }
+      return false;
+    }
+
+    function disposeGroup(group) {
+      if (!group) return;
+      const materials = new Set();
+      group.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        const list = Array.isArray(child.material) ? child.material : [child.material];
+        for (const material of list) {
+          if (!isSharedMaterial(material)) materials.add(material);
+        }
+      });
+      for (const material of materials) material.dispose();
+    }
+
+    function clearLabels() {
+      if (!labelsGroup) return;
+      labelsGroup.traverse((child) => {
+        if (child.element?.parentNode) child.element.parentNode.removeChild(child.element);
+      });
+      scene.remove(labelsGroup);
+      labelsGroup = null;
+    }
+
+    function makeCylinder(start, end, radius, material) {
+      const length = start.distanceTo(end);
+      const geometry = new THREE.CylinderGeometry(radius, radius, length, 10, 1);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(start).add(end).multiplyScalar(0.5);
+      mesh.quaternion.setFromUnitVectors(cylinderAxis, end.clone().sub(start).normalize());
+      return mesh;
+    }
+
+    function rebuildStructure() {
+      if (structureGroup) {
+        scene.remove(structureGroup);
+        disposeGroup(structureGroup);
+        structureGroup = null;
+      }
+      if (!currentData) return;
+
+      const radius = Math.max(displayDiameter() / 2, 0.001);
+      const group = new THREE.Group();
+      group.name = 'cables';
+      const jointKeys = new Map();
+
+      for (const cable of visibleCables()) {
+        for (const [start, end] of cable.runs) {
+          const material = materialFor(colorForCable(cable)).clone();
+          const mesh = makeCylinder(start, end, radius, material);
+          mesh.userData.cableId = cable.id;
+          mesh.userData.baseAppearance = {
+            color: material.color.getHex(),
+            emissive: material.emissive.getHex(),
+            emissiveIntensity: material.emissiveIntensity,
+          };
+          group.add(mesh);
+          if (showJointsInput.checked) {
+            jointKeys.set(pointKey(start), start);
+            jointKeys.set(pointKey(end), end);
+          }
+        }
+      }
+
+      if (showJointsInput.checked && jointKeys.size) {
+        const jointRadius = Math.max(radius * 1.45, 0.008);
+        const jointGeometry = new THREE.SphereGeometry(1, 12, 10);
+        const jointMaterial = new THREE.MeshStandardMaterial({
+          color: 0xf8fafc,
+          emissive: 0xdbe7f5,
+          emissiveIntensity: 0.35,
+          metalness: 0.15,
+          roughness: 0.35,
+        });
+        const joints = new THREE.InstancedMesh(jointGeometry, jointMaterial, jointKeys.size);
+        joints.name = 'joints';
+        const dummy = new THREE.Object3D();
+        let index = 0;
+        for (const point of jointKeys.values()) {
+          dummy.position.copy(point);
+          dummy.scale.setScalar(jointRadius);
+          dummy.updateMatrix();
+          joints.setMatrixAt(index, dummy.matrix);
+          index += 1;
+        }
+        joints.instanceMatrix.needsUpdate = true;
+        joints.raycast = () => {};
+        group.add(joints);
+      }
+
+      if (showLinesInput.checked) {
+        const positions = [];
+        const colors = [];
+        const cableIds = [];
+        const color = new THREE.Color();
+        for (const cable of visibleCables()) {
+          color.setHex(colorForCable(cable));
+          for (const [start, end] of cable.runs) {
+            positions.push(start.x, start.y, start.z, end.x, end.y, end.z);
+            colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+            cableIds.push(cable.id, cable.id);
+          }
+        }
+        if (positions.length) {
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+          geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+          const lines = new THREE.LineSegments(
+            geometry,
+            new THREE.LineBasicMaterial({ vertexColors: true })
+          );
+          lines.name = 'centerlines';
+          lines.userData.baseColors = colors;
+          lines.userData.cableIds = cableIds;
+          group.add(lines);
+        }
+      }
+
+      structureGroup = group;
+      scene.add(structureGroup);
+      applySelectionVisuals();
+      rebuildLabels();
+    }
+
+    function rebuildPosts() {
+      if (postGroup) {
+        scene.remove(postGroup);
+        disposeGroup(postGroup);
+        postGroup = null;
+      }
+      if (!currentData?.posts.length || !showPostsInput.checked) return;
+      const group = new THREE.Group();
+      const material = new THREE.MeshStandardMaterial({
+        color: 0xd8dde6,
+        emissive: 0xa8b0bc,
+        emissiveIntensity: 0.2,
+        metalness: 0.55,
+        roughness: 0.35,
+      });
+      for (const post of currentData.posts) {
+        const mesh = makeCylinder(post.start, post.end, Math.max(post.diameter / 2, 0.01), material);
+        mesh.userData.isPost = true;
+        group.add(mesh);
+      }
+      postGroup = group;
+      scene.add(postGroup);
+    }
+
+    function rebuildBounds() {
+      if (boundsGroup) {
+        boundsGroup.traverse((child) => {
+          if (child.element?.parentNode) child.element.parentNode.removeChild(child.element);
+        });
+        scene.remove(boundsGroup);
+        disposeGroup(boundsGroup);
+        boundsGroup = null;
+      }
+      if (!currentData || !showBoundsInput.checked) return;
+      const { min, max, center, size } = currentData.bounds;
+      const group = new THREE.Group();
+      group.name = 'artwork-bounds';
+      const box = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const edges = new THREE.EdgesGeometry(box);
+      box.dispose();
+      const wire = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.9, fog: false })
+      );
+      wire.position.copy(center);
+      group.add(wire);
+      const place = (text, x, y, z) => {
+        const element = document.createElement('div');
+        element.className = 'bounds-label';
+        element.textContent = text;
+        const label = new CSS2DObject(element);
+        label.position.set(x, y, z);
+        group.add(label);
+      };
+      place(`W ${size.x.toFixed(2)} m`, center.x, min.y, max.z);
+      place(`H ${size.y.toFixed(2)} m`, max.x, center.y, center.z);
+      place(`D ${size.z.toFixed(2)} m`, center.x, max.y, center.z);
+      boundsGroup = group;
+      scene.add(boundsGroup);
+    }
+
+    function buildPersonShape(height) {
+      const h = height;
+      const shape = new THREE.Shape();
+      const headR = h * 0.072;
+      const headCY = h - headR - h * 0.012;
+      const neckW = h * 0.042;
+      const shoulderY = h * 0.808;
+      const shoulderW = h * 0.125;
+      const elbowY = h * 0.655;
+      const armOut = h * 0.2;
+      const handY = h * 0.545;
+      const handW = h * 0.175;
+      const waistY = h * 0.585;
+      const waistW = h * 0.085;
+      const hipY = h * 0.468;
+      const hipW = h * 0.095;
+      const kneeY = h * 0.265;
+      const legOut = h * 0.058;
+      const footW = h * 0.048;
+      const legGap = h * 0.028;
+      shape.moveTo(-legOut - footW * 0.15, 0);
+      shape.lineTo(-legOut - footW * 0.15, h * 0.028);
+      shape.lineTo(-legGap, hipY - h * 0.01);
+      shape.lineTo(0, hipY - h * 0.025);
+      shape.lineTo(legGap, hipY - h * 0.01);
+      shape.lineTo(legOut + footW * 0.15, h * 0.028);
+      shape.lineTo(legOut + footW * 0.15, 0);
+      shape.lineTo(legOut, 0);
+      shape.lineTo(legOut, h * 0.032);
+      shape.quadraticCurveTo(legOut * 1.05, kneeY, hipW, hipY);
+      shape.lineTo(waistW, waistY);
+      shape.lineTo(shoulderW, shoulderY);
+      shape.quadraticCurveTo(armOut * 0.92, elbowY, armOut, handY);
+      shape.quadraticCurveTo(handW, handY - h * 0.02, shoulderW * 0.88, shoulderY - h * 0.015);
+      shape.lineTo(neckW, headCY - headR * 0.45);
+      shape.lineTo(headR * 0.35, headCY + headR * 0.05);
+      shape.absarc(0, headCY, headR, 0.08 * Math.PI, 0.92 * Math.PI, false);
+      shape.lineTo(-headR * 0.35, headCY + headR * 0.05);
+      shape.lineTo(-neckW, headCY - headR * 0.45);
+      shape.lineTo(-shoulderW * 0.88, shoulderY - h * 0.015);
+      shape.quadraticCurveTo(-handW, handY - h * 0.02, -armOut, handY);
+      shape.quadraticCurveTo(-armOut * 0.92, elbowY, -shoulderW, shoulderY);
+      shape.lineTo(-waistW, waistY);
+      shape.quadraticCurveTo(-hipW, hipY, -legOut * 1.05, kneeY);
+      shape.lineTo(-legOut, h * 0.032);
+      shape.lineTo(-legOut, 0);
+      shape.closePath();
+      return shape;
+    }
+
+    function buildPerson(height) {
+      const group = new THREE.Group();
+      const geometry = new THREE.ShapeGeometry(buildPersonShape(height));
+      const fill = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({
+          color: 0xdbeafe,
+          transparent: true,
+          opacity: 0.88,
+          side: THREE.DoubleSide,
+          fog: false,
+          depthWrite: false,
+        })
+      );
+      const outline = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry),
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, fog: false })
+      );
+      group.add(fill, outline);
+      return group;
+    }
+
+    function rebuildPeople() {
+      if (peopleGroup) {
+        scene.remove(peopleGroup);
+        disposeGroup(peopleGroup);
+        peopleGroup = null;
+      }
+      if (!currentData || !showPeopleInput.checked) return;
+      const height = Number.parseFloat(personHeightInput.value);
+      const personHeight = Number.isFinite(height) && height > 0 ? height : 1.6;
+      const { min, max } = currentData.bounds;
+      const groundY = min.y;
+      peopleGroup = new THREE.Group();
+      for (const [x, z] of [
+        [min.x, min.z],
+        [max.x, min.z],
+        [min.x, max.z],
+        [max.x, max.z],
+      ]) {
+        const person = buildPerson(personHeight);
+        person.position.set(x, groundY, z);
+        peopleGroup.add(person);
+      }
+      scene.add(peopleGroup);
+    }
+
+    function rebuildEnvironment() {
+      if (grid) {
+        scene.remove(grid);
+        disposeGroup(grid);
+        grid = null;
+      }
+      if (ground) {
+        scene.remove(ground);
+        disposeGroup(ground);
+        ground = null;
+      }
+      if (!currentData) return;
+      const { center, size, min } = currentData.bounds;
+      const span = Math.max(size.x, size.z, 1);
+      const gridSize = Math.max(10, Math.ceil(span * 1.5));
+      const floorY = min.y - Math.max(size.y, 1) * 0.015;
+      grid = new THREE.GridHelper(gridSize, 20, 0x2a3344, 0x1a2230);
+      grid.position.set(center.x, floorY, center.z);
+      grid.visible = showGroundInput.checked;
+      scene.add(grid);
+
+      ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(gridSize, gridSize),
+        new THREE.MeshStandardMaterial({
+          color: 0x121820,
+          transparent: true,
+          opacity: 0.55,
+          roughness: 1,
+          metalness: 0,
+        })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.set(center.x, floorY, center.z);
+      ground.visible = showGroundInput.checked;
+      scene.add(ground);
+
+      const maxDim = Math.max(size.x, size.y, size.z, 1);
+      scene.fog.near = maxDim * 4;
+      scene.fog.far = maxDim * 14;
+      controls.maxDistance = maxDim * 12;
+      controls.minDistance = 0.05;
+    }
+
+    function formatMeters(value) {
+      return `${Number(value).toFixed(3)} m`;
+    }
+
+    function renderStats(data, fileName) {
+      const summary = data.summary;
+      filenameEl.textContent = summary.objectName
+        ? `${fileName} · ${summary.objectName}`
+        : fileName;
+      footerFileEl.textContent = fileName;
+      const lengthDelta =
+        summary.headerLength == null
+          ? null
+          : Math.abs(summary.computedTotalLength - summary.headerLength);
+      const pieceDelta =
+        summary.totalPieces == null ? null : Math.abs(summary.pieceSum - summary.totalPieces);
+      const rows = [
+        ['Format', summary.format === 'cable' ? 'Cable export' : 'Edgemesh'],
+        ['Cables', summary.cableCount.toLocaleString()],
+        ['Vertices', summary.vertexCount.toLocaleString()],
+        ['Samples', summary.sampleCount.toLocaleString()],
+        ['Length', formatMeters(summary.computedTotalLength)],
+      ];
+      if (summary.totalPieces != null) rows.push(['Pieces', summary.totalPieces.toLocaleString()]);
+      if (summary.costLabel) rows.push(['Cost', summary.costLabel]);
+      if (summary.mass0Count) rows.push(['Mass 0', String(summary.mass0Count)]);
+      if (summary.postCount) rows.push(['Posts', String(summary.postCount)]);
+      rows.push([
+        'Bounds',
+        `${data.bounds.size.x.toFixed(1)} × ${data.bounds.size.y.toFixed(1)} × ${data.bounds.size.z.toFixed(1)} m`,
+      ]);
+      rows.push(['Highest', `${data.bounds.max.y.toFixed(2)} m`]);
+      statsEl.innerHTML = rows
+        .map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`)
+        .join('');
+      const notes = [];
+      if (lengthDelta != null) {
+        notes.push(
+          lengthDelta < 0.05
+            ? '<p class="ok">Sampled length matches the CSV total.</p>'
+            : `<p class="warn">Sampled length differs from the CSV total by ${lengthDelta.toFixed(3)} m.</p>`
+        );
+      }
+      if (pieceDelta != null && pieceDelta > 0.01) {
+        notes.push(
+          `<p class="warn">Piece counts sum to ${summary.pieceSum.toLocaleString()}, header says ${summary.totalPieces.toLocaleString()}.</p>`
+        );
+      }
+      if (summary.lengthMismatchCount) {
+        notes.push(
+          `<p class="warn">${summary.lengthMismatchCount} cables differ from their tubelength.</p>`
+        );
+      }
+      statsNotesEl.innerHTML = notes.join('');
+      statsEl.dataset.ready = '1';
+    }
+
+    function renderLegend() {
+      const mode = colorModeInput.value;
+      if (!currentData || mode === 'uniform') {
+        legendEl.innerHTML = '';
+        return;
+      }
+      const items = [];
+      if (mode === 'pieces') {
+        const counts = new Map();
+        for (const cable of currentData.cables) {
+          const key = cable.pieces ?? 0;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        }
+        for (const pieces of [...counts.keys()].sort((a, b) => a - b)) {
+          const hex = pieces >= 20 ? 0xf8fafc : PIECE_COLORS[pieces] || 0x94a3b8;
+          items.push([hex, `${pieces} pcs · ${counts.get(pieces)}`]);
+        }
+      } else {
+        const counts = new Map();
+        for (const cable of currentData.cables) counts.set(cable.role, (counts.get(cable.role) || 0) + 1);
+        const labels = {
+          rim: 'Rim weight',
+          center: 'Center weight',
+          both: 'Rim and center',
+          plain: 'No rim/center',
+          mass0: 'Mass 0',
+        };
+        for (const role of ['rim', 'center', 'both', 'plain', 'mass0']) {
+          if (!counts.has(role)) continue;
+          items.push([ROLE_COLORS[role], `${labels[role]} · ${counts.get(role)}`]);
+        }
+      }
+      legendEl.innerHTML = items
+        .map(
+          ([hex, label]) =>
+            `<div><span class="swatch" style="background:#${hex.toString(16).padStart(6, '0')}"></span>${label}</div>`
+        )
+        .join('');
+    }
+
+    function getSelected() {
+      if (selectedId == null || !currentData) return null;
+      return currentData.cables.find((cable) => cable.id === selectedId) ?? null;
+    }
+
+    function renderSelection() {
+      const cable = getSelected();
+      const hasSelection = Boolean(cable);
+      frameSelectedBtn.disabled = !hasSelection;
+      isolateBtn.disabled = !hasSelection;
+      clearSelectionBtn.disabled = !hasSelection && !isolateMode;
+      isolateBtn.classList.toggle('btn-active', isolateMode);
+      if (!cable) {
+        selectionTitle.textContent = 'No cable selected';
+        selectionInfo.innerHTML = '';
+        return;
+      }
+      selectionTitle.textContent = isolateMode ? `Cable ${cable.id} · data only` : `Cable ${cable.id}`;
+      const rows = [
+        ['Rows', `${cable.indexStart}–${cable.indexEnd}`],
+        ['Samples', String(cable.sampleCount)],
+        ['Length', formatMeters(cable.csvLength)],
+        ['Drawn', formatMeters(cable.computedLength)],
+      ];
+      if (cable.pieces != null) rows.push(['Pieces', String(cable.pieces)]);
+      if (cable.mass != null) rows.push(['Mass', String(cable.mass)]);
+      if (cable.cellId != null) rows.push(['Cell', String(cable.cellId)]);
+      if (cable.diameter != null) rows.push(['Diameter', formatMeters(cable.diameter)]);
+      rows.push(['Rim', `${cable.rimMin.toFixed(2)}–${cable.rimMax.toFixed(2)}`]);
+      rows.push(['Center', `${cable.centerMin.toFixed(2)}–${cable.centerMax.toFixed(2)}`]);
+      rows.push(['Role', cable.role]);
+      selectionInfo.innerHTML = rows
+        .map(([label, value]) => `<dt class="muted">${label}</dt><dd>${value}</dd>`)
+        .join('');
+      if (isolateMode) {
+        selectionInfo.insertAdjacentHTML(
+          'beforeend',
+          '<p class="selection-note">Data selected only active</p>'
+        );
+      }
+    }
+
+    function restoreCableMesh(mesh) {
+      const base = mesh.userData.baseAppearance;
+      if (!base) return;
+      mesh.material.color.setHex(base.color);
+      mesh.material.emissive.setHex(base.emissive);
+      mesh.material.emissiveIntensity = base.emissiveIntensity;
+    }
+
+    function dimCableMesh(mesh) {
+      restoreCableMesh(mesh);
+      mesh.material.color.multiplyScalar(DIM_FACTOR);
+      mesh.material.emissive.multiplyScalar(DIM_FACTOR);
+      mesh.material.emissiveIntensity *= DIM_FACTOR;
+    }
+
+    function emphasizeLines() {
+      const lines = structureGroup?.getObjectByName('centerlines');
+      if (!lines) return;
+      const base = lines.userData.baseColors;
+      const ids = lines.userData.cableIds;
+      const attr = lines.geometry.getAttribute('color');
+      for (let i = 0; i < ids.length; i++) {
+        const selected = selectedId != null && ids[i] === selectedId;
+        const dim = selectedId != null && !selected;
+        if (selected) attr.setXYZ(i, 1, 0.478, 0);
+        else {
+          const scale = dim ? DIM_FACTOR : 1;
+          attr.setXYZ(i, base[i * 3] * scale, base[i * 3 + 1] * scale, base[i * 3 + 2] * scale);
+        }
+      }
+      attr.needsUpdate = true;
+    }
+
+    function applySelectionVisuals() {
+      if (!structureGroup) return;
+      structureGroup.traverse((child) => {
+        if (!child.isMesh || child.userData.cableId == null) return;
+        if (selectedId != null && child.userData.cableId === selectedId) {
+          child.material.color.setHex(SELECTED_COLOR);
+          child.material.emissive.setHex(SELECTED_COLOR);
+          child.material.emissiveIntensity = 0.85;
+        } else if (selectedId != null) {
+          dimCableMesh(child);
+        } else {
+          restoreCableMesh(child);
+        }
+      });
+      emphasizeLines();
+    }
+
+    function rebuildLabels() {
+      clearLabels();
+      if (!currentData) return;
+      const selected = getSelected();
+      const showIndexes = showIndexesInput.checked;
+      const showLengths = showLengthsInput.checked;
+      labelsGroup = new THREE.Group();
+
+      const addLabel = (cable, selectedLabel) => {
+        const lines = [];
+        if (showIndexes || selectedLabel) lines.push(`#${cable.id}`);
+        if (showLengths || selectedLabel) lines.push(formatMeters(cable.csvLength));
+        if (!lines.length) return;
+        const element = document.createElement('div');
+        element.className = selectedLabel ? 'tube-label tube-label--selected' : 'tube-label';
+        element.textContent = lines.join('\n');
+        const label = new CSS2DObject(element);
+        const mid = midpointAlong(cable.points);
+        label.position.copy(mid);
+        labelsGroup.add(label);
+      };
+
+      if (isolateMode && selected) {
+        addLabel(selected, true);
+      } else if (showIndexes || showLengths) {
+        for (const cable of visibleCables()) addLabel(cable, cable.id === selectedId);
+      } else if (selected) {
+        addLabel(selected, true);
+      }
+
+      scene.add(labelsGroup);
+    }
+
+    function selectCable(id, frame) {
+      selectedId = id;
+      applySelectionVisuals();
+      rebuildLabels();
+      renderSelection();
+      if (!csvDriving) csvViewer.focusCable(id);
+      if (frame) {
+        const cable = getSelected();
+        if (cable) frameCable(cable);
+      }
+    }
+
+    function clearSelection() {
+      selectedId = null;
+      isolateMode = false;
+      applySelectionVisuals();
+      rebuildLabels();
+      renderSelection();
+      if (!csvDriving) csvViewer.focusCable(null);
+    }
+
+    function frameCable(cable) {
+      const mid = midpointAlong(cable.points);
+      const frameSize = Math.max(cable.computedLength * 1.15, displayDiameter() * 10, 0.4);
+      const fov = (camera.fov * Math.PI) / 180;
+      const vertical = frameSize / Math.tan(fov / 2);
+      const horizontalFov = 2 * Math.atan(Math.tan(fov / 2) * (camera.aspect || 1));
+      const horizontal = frameSize / Math.tan(horizontalFov / 2);
+      const distance = Math.max(vertical, horizontal) * 1.15;
+      const direction = camera.position.clone().sub(controls.target);
+      if (direction.lengthSq() < 1e-6) direction.set(1, 0.55, 1);
+      direction.normalize().multiplyScalar(distance);
+      animateCamera(mid, mid.clone().add(direction));
+    }
+
+    function fitCamera(bounds) {
+      const maxDim = Math.max(bounds.size.x, bounds.size.y, bounds.size.z, 1);
+      const offset = new THREE.Vector3(1, 0.62, 1).normalize().multiplyScalar(maxDim * 1.45);
+      animateCamera(bounds.center.clone(), bounds.center.clone().add(offset));
+    }
+
+    function animateCamera(target, position) {
+      if (cameraAnimation) cancelAnimationFrame(cameraAnimation);
+      const startTarget = controls.target.clone();
+      const startPosition = camera.position.clone();
+      const start = performance.now();
+      const step = (now) => {
+        const t = Math.min((now - start) / 480, 1);
+        const eased = 1 - (1 - t) ** 3;
+        controls.target.lerpVectors(startTarget, target, eased);
+        camera.position.lerpVectors(startPosition, position, eased);
+        controls.update();
+        if (t < 1) cameraAnimation = requestAnimationFrame(step);
+        else cameraAnimation = null;
+      };
+      cameraAnimation = requestAnimationFrame(step);
+    }
+
+    function applyDiameterDefault(data) {
+      const fromCsv = data.cables.find((cable) => cable.diameter > 0)?.diameter;
+      const value = fromCsv || DEFAULT_DIAMETER;
+      diameterInput.value = String(value);
+      diameterReadout.textContent = formatMeters(value);
+    }
+
+    function loadCSVText(text, fileName) {
+      const data = parseCSV(text);
+      currentData = data;
+      currentFileName = fileName;
+      selectedId = null;
+      isolateMode = false;
+      mass0Toggle.hidden = data.summary.mass0Count === 0;
+      postsToggle.hidden = data.posts.length === 0;
+      applyDiameterDefault(data);
+      rebuildEnvironment();
+      rebuildStructure();
+      rebuildPosts();
+      rebuildBounds();
+      rebuildPeople();
+      renderStats(data, fileName);
+      renderLegend();
+      renderSelection();
+      csvViewer.setData(data);
+      fitCamera(data.bounds);
+    }
+
+    function getEmbeddedCsvText() {
+      const node = document.getElementById('default-csv-data');
+      const text = node?.textContent?.trim() ?? '';
+      if (!text || text.includes('___EMBEDDED_CSV___')) {
+        throw new Error('Embedded CSV is missing. Use Load CSV.');
+      }
+      return text;
+    }
+
+    function resize() {
+      const width = window.innerWidth;
+      const bar = csvViewerEl?.offsetHeight || 148;
+      const height = Math.max(200, window.innerHeight - bar);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+      labelRenderer.setSize(width, height);
+    }
+
+    const pickProjected = new THREE.Vector3();
+
+    function projectToScreen(point, rect) {
+      pickProjected.copy(point).project(camera);
+      if (pickProjected.z > 1) return null;
+      return {
+        x: (pickProjected.x * 0.5 + 0.5) * rect.width,
+        y: (-pickProjected.y * 0.5 + 0.5) * rect.height,
+      };
+    }
+
+    function distanceToSegment2D(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const lengthSq = dx * dx + dy * dy;
+      if (lengthSq < 1e-6) return Math.hypot(px - x1, py - y1);
+      const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSq));
+      return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+
+    function pickCableId(clientX, clientY) {
+      if (!structureGroup) return null;
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(structureGroup.children, true);
+      const hit = hits.find((entry) => entry.object.userData.cableId != null);
+      if (hit) return hit.object.userData.cableId;
+
+      const clickX = clientX - rect.left;
+      const clickY = clientY - rect.top;
+      let bestId = null;
+      let bestDistance = PICK_PIXELS;
+      for (const cable of visibleCables()) {
+        for (const [start, end] of cable.runs) {
+          const startScreen = projectToScreen(start, rect);
+          const endScreen = projectToScreen(end, rect);
+          if (!startScreen || !endScreen) continue;
+          const distance = distanceToSegment2D(
+            clickX,
+            clickY,
+            startScreen.x,
+            startScreen.y,
+            endScreen.x,
+            endScreen.y
+          );
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestId = cable.id;
+          }
+        }
+      }
+      return bestId;
+    }
+
+    function escapeHtml(text) {
+      return String(text ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+
+    function createCsvViewer(container) {
+      container.innerHTML = `
+        <div class="csv-viewer-toolbar">
+          <span class="section" style="margin:0;padding:0;border:0;color:var(--muted);font-size:11px;letter-spacing:0.06em;text-transform:uppercase">CSV rows</span>
+          <button type="button" class="btn csv-nav-btn" data-dir="-1">Previous</button>
+          <button type="button" class="btn csv-nav-btn" data-dir="1">Next</button>
+          <span class="csv-viewer-position">—</span>
+        </div>
+        <div class="csv-viewer-table-wrap" tabindex="0">
+          <p class="csv-viewer-empty">Load a CSV to browse cable rows.</p>
+        </div>
+      `;
+      const positionEl = container.querySelector('.csv-viewer-position');
+      const tableWrap = container.querySelector('.csv-viewer-table-wrap');
+      let cables = [];
+      let headers = [];
+      let index = 0;
+
+      function render(activeId) {
+        if (!cables.length) {
+          tableWrap.innerHTML = '<p class="csv-viewer-empty">Load a CSV to browse cable rows.</p>';
+          positionEl.textContent = '—';
+          return;
+        }
+        index = Math.max(0, Math.min(index, cables.length - 1));
+        const cable = cables[index];
+        const active = activeId != null && cable.id === activeId;
+        positionEl.textContent = `Cable ${cable.id} · ${cable.rows.length} CSV rows (${index + 1} / ${cables.length})`;
+        const head = headers
+          .map((header) => `<th>${escapeHtml(header)}</th>`)
+          .join('');
+        const body = cable.rows
+          .map((row) => {
+            const cells = headers
+              .map((header, column) => {
+                const value = row[header] ?? '';
+                if (column === 0) {
+                  return `<td><button type="button" class="csv-id-btn${active ? ' csv-id-btn--active' : ''}" data-cable-id="${cable.id}">${escapeHtml(value)}</button></td>`;
+                }
+                return `<td title="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
+              })
+              .join('');
+            return `<tr class="${active ? 'csv-row--active' : ''}">${cells}</tr>`;
+          })
+          .join('');
+        tableWrap.innerHTML = `<table class="csv-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+      }
+
+      function show(nextIndex) {
+        if (!cables.length) return;
+        index = Math.max(0, Math.min(nextIndex, cables.length - 1));
+        render(cables[index].id);
+        csvDriving = true;
+        selectCable(cables[index].id, false);
+        csvDriving = false;
+      }
+
+      container.querySelectorAll('.csv-nav-btn').forEach((button) => {
+        button.addEventListener('click', () => {
+          show(index + Number.parseInt(button.dataset.dir, 10));
+        });
+      });
+      tableWrap.addEventListener(
+        'wheel',
+        (event) => {
+          if (!cables.length) return;
+          event.preventDefault();
+          show(index + (event.deltaY > 0 ? 1 : -1));
+        },
+        { passive: false }
+      );
+      tableWrap.addEventListener('click', (event) => {
+        const button = event.target.closest('.csv-id-btn');
+        if (!button) return;
+        csvDriving = true;
+        selectCable(Number(button.dataset.cableId), false);
+        csvDriving = false;
+      });
+
+      return {
+        setData(data) {
+          cables = data?.cables ?? [];
+          headers = data?.csvHeaders ?? [];
+          index = 0;
+          render(null);
+        },
+        focusCable(id) {
+          if (!cables.length) return;
+          if (id == null) {
+            render(null);
+            return;
+          }
+          const found = cables.findIndex((cable) => cable.id === id);
+          if (found < 0) return;
+          index = found;
+          render(id);
+        },
+      };
+    }
+
+    let csvDriving = false;
+    const csvViewer = createCsvViewer(csvViewerEl);
+
+    canvas.addEventListener('pointerdown', (event) => {
+      pointerDown.x = event.clientX;
+      pointerDown.y = event.clientY;
+    });
+
+    canvas.addEventListener('pointerup', (event) => {
+      if (event.button !== 0) return;
+      const dx = event.clientX - pointerDown.x;
+      const dy = event.clientY - pointerDown.y;
+      if (Math.hypot(dx, dy) > 5 || !structureGroup) return;
+      const cableId = pickCableId(event.clientX, event.clientY);
+      if (cableId != null) selectCable(cableId, false);
+      else clearSelection();
+    });
+
+    document.getElementById('csv-input').addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+      try {
+        loadCSVText(await file.text(), file.name);
+      } catch (error) {
+        statsEl.innerHTML = `<p class="error">${error.message}</p>`;
+      }
+    });
+
+    window.addEventListener('dragover', (event) => event.preventDefault());
+    window.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) return;
+      try {
+        loadCSVText(await file.text(), file.name);
+      } catch (error) {
+        statsEl.innerHTML = `<p class="error">${error.message}</p>`;
+      }
+    });
+
+    document.getElementById('reload-default').addEventListener('click', () => {
+      try {
+        loadCSVText(getEmbeddedCsvText(), '006_webviewer.csv');
+      } catch (error) {
+        statsEl.innerHTML = `<p class="error">${error.message}</p>`;
+      }
+    });
+
+    document.getElementById('reset-camera').addEventListener('click', () => {
+      if (currentData) fitCamera(currentData.bounds);
+    });
+
+    diameterInput.addEventListener('input', () => {
+      diameterReadout.textContent = formatMeters(diameterInput.value);
+      clearTimeout(diameterTimer);
+      diameterTimer = setTimeout(rebuildStructure, 80);
+    });
+
+    colorModeInput.addEventListener('change', () => {
+      renderLegend();
+      rebuildStructure();
+    });
+    showJointsInput.addEventListener('change', rebuildStructure);
+    showLinesInput.addEventListener('change', rebuildStructure);
+    showMass0Input.addEventListener('change', () => {
+      if (!showMass0Input.checked && getSelected()?.role === 'mass0') selectedId = null;
+      rebuildStructure();
+      renderSelection();
+    });
+    highlightErrorsInput.addEventListener('change', rebuildStructure);
+    showIndexesInput.addEventListener('change', rebuildLabels);
+    showLengthsInput.addEventListener('change', rebuildLabels);
+    showPostsInput.addEventListener('change', rebuildPosts);
+    showBoundsInput.addEventListener('change', rebuildBounds);
+    showPeopleInput.addEventListener('change', rebuildPeople);
+    personHeightInput.addEventListener('change', rebuildPeople);
+    showGroundInput.addEventListener('change', () => {
+      const visible = showGroundInput.checked;
+      if (grid) grid.visible = visible;
+      if (ground) ground.visible = visible;
+    });
+
+    document.getElementById('goto-cable').addEventListener('click', () => {
+      if (!currentData) return;
+      const index = Number.parseInt(gotoInput.value, 10);
+      if (!Number.isFinite(index)) return;
+      const cable = currentData.cables.find(
+        (entry) => index >= entry.indexStart && index <= entry.indexEnd
+      );
+      if (!cable) {
+        selectionTitle.textContent = `No cable contains row ${index}`;
+        selectionInfo.innerHTML = '';
+        return;
+      }
+      if (cable.role === 'mass0') showMass0Input.checked = true;
+      isolateMode = false;
+      rebuildStructure();
+      selectCable(cable.id, true);
+    });
+
+    frameSelectedBtn.addEventListener('click', () => {
+      const cable = getSelected();
+      if (cable) frameCable(cable);
+    });
+
+    isolateBtn.addEventListener('click', () => {
+      if (!getSelected()) return;
+      isolateMode = !isolateMode;
+      applySelectionVisuals();
+      rebuildLabels();
+      renderSelection();
+    });
+
+    clearSelectionBtn.addEventListener('click', clearSelection);
+
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') clearSelection();
+      if (event.key === 'f' && event.target.tagName !== 'INPUT') {
+        if (currentData) fitCamera(currentData.bounds);
+      }
+    });
+
+    window.addEventListener('resize', resize);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const distance = camera.position.distanceTo(controls.target);
+      const near = Math.max(0.01, distance / 800);
+      const far = Math.max(distance * 40, 200);
+      if (Math.abs(camera.near - near) > near * 0.2 || Math.abs(camera.far - far) > far * 0.2) {
+        camera.near = near;
+        camera.far = far;
+        camera.updateProjectionMatrix();
+      }
+      controls.update();
+      renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
+    }
+
+    resize();
+    animate();
+    renderSelection();
+
+    try {
+      loadCSVText(getEmbeddedCsvText(), '006_webviewer.csv');
+    } catch (error) {
+      statsEl.innerHTML = `<p class="error">${error.message}</p>`;
+    }
+  </script>
+</body>
+</html>
